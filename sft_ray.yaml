@@ -13,7 +13,6 @@ spec:
       NCCL_DEBUG: "INFO"
       FI_PROVIDER: "EFA"
       NCCL_SOCKET_IFNAME: "^lo"
-      HF_TOKEN: "hf_xxxxx
       HF_HUB_CACHE: "/data/hf_cache"
       FI_EFA_USE_DEVICE_RDMA: "1"
       FI_EFA_ENABLE_SHM_TRANSFER: "1"
