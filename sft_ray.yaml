@@ -1,0 +1,147 @@
+apiVersion: ray.io/v1alpha1
+kind: RayJob
+metadata:
+  name: verl-sft-training
+  labels:
+    job-type: "sft-training"
+    model: "llama"
+spec:
+  # Job configuration
+  runtimeEnvYAML: |
+    env_vars:
+      CUDA_VISIBLE_DEVICES: "0,1,2,3,4,5,6,7"
+      NCCL_DEBUG: "INFO"
+      FI_PROVIDER: "EFA"
+      NCCL_SOCKET_IFNAME: "^lo"
+      HF_TOKEN: "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"
+      HF_HUB_CACHE: "/data/hf_cache"
+      FI_EFA_USE_DEVICE_RDMA: "1"
+      FI_EFA_ENABLE_SHM_TRANSFER: "1"
+      TORCH_NCCL_ENABLE_MONITORING: "1"
+      TORCH_NCCL_TRACE_BUFFER_SIZE: "20000"
+      TORCH_NCCL_DUMP_ON_TIMEOUT: "1"
+      TORCH_NCCL_ASYNC_ERROR_HANDLING: "1"
+      NCCL_TREE_THRESHOLD: "0"
+      NCCL_DEBUG: "INFO"
+  entrypoint: >
+    python3 -m verl.trainer.fsdp_sft_trainer 
+      data.train_files=/data/gsm8k/train.parquet
+      data.val_files=/data/gsm8k/test.parquet
+      data.prompt_key=extra_info
+      data.response_key=extra_info
+      optim.lr=1e-4
+      data.prompt_dict_keys=['question']
+      +data.response_dict_keys=['answer']
+      data.micro_batch_size_per_gpu=4
+      model.partial_pretrain=Qwen/Qwen2.5-0.5B-Instruct
+      trainer.default_local_dir=/data/qwen
+      trainer.project_name=gsm8k-sft
+      trainer.experiment_name=gsm8k-sft-qwen-2.5-0.5b-instruct
+      trainer.logger=console
+      trainer.total_epochs=10
+      trainer.s3_base_path=s3://sagemaker-hyperpod-eks-ak-bucket-535002850097-us-west-1/checkpoints
+      trainer.ckpt_namespace=testns13
+      trainer.save_freq=10
+      model.lora_rank=32
+      model.lora_alpha=16
+      model.target_modules=all-linear
+
+  # Ephemeral cluster will be created and destroyed with this job
+  rayClusterSpec:
+    rayVersion: "2.8.0"
+    enableInTreeAutoscaling: true
+
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: "0.0.0.0"
+        num-cpus: "16"
+      template:
+        spec:
+          serviceAccountName: s3-cw-access
+          containers:
+            - name: ray-head
+              image: 535002850097.dkr.ecr.us-east-1.amazonaws.com/verl-training:latest # Update this
+              imagePullPolicy: Always
+              resources:
+                limits:
+                  cpu: 32
+                  memory: 128Gi
+                requests:
+                  cpu: 16
+                  memory: 64Gi
+              ports:
+                - containerPort: 6379
+                  name: gcs-server
+                - containerPort: 8265
+                  name: dashboard
+                - containerPort: 10001
+                  name: client
+              env:
+                - name: RAY_DISABLE_DOCKER_CPU_WARNING
+                  value: "1"
+              volumeMounts:
+                - name: shared-storage
+                  mountPath: /data
+          volumes:
+            - name: shared-storage
+              persistentVolumeClaim:
+                claimName: fsx-claim
+          nodeSelector:
+            node.kubernetes.io/instance-type: "ml.p5.48xlarge"
+
+    workerGroupSpecs:
+      - replicas: 2
+        minReplicas: 2
+        maxReplicas: 2
+        groupName: p5-gpu-workers
+        rayStartParams:
+          num-cpus: "190"
+          num-gpus: "8"
+        template:
+          spec:
+            serviceAccountName: s3-cw-access
+            containers:
+              - name: ray-worker
+                image: 535002850097.dkr.ecr.us-east-1.amazonaws.com/verl-training:latest # Update this
+                imagePullPolicy: Always
+                resources:
+                  limits:
+                    cpu: 190
+                    memory: 1500Gi
+                    nvidia.com/gpu: 8
+                    vpc.amazonaws.com/efa: 32
+                  requests:
+                    cpu: 95
+                    memory: 750Gi
+                    nvidia.com/gpu: 8
+                    vpc.amazonaws.com/efa: 32
+                env:
+                  - name: RAY_DISABLE_DOCKER_CPU_WARNING
+                    value: "1"
+                  - name: NCCL_DEBUG
+                    value: "INFO"
+                  - name: NCCL_TREE_THRESHOLD
+                    value: "0"
+                volumeMounts:
+                  - name: shared-storage
+                    mountPath: /workspace/shared
+                  - name: shm
+                    mountPath: /dev/shm
+            volumes:
+              - name: shared-storage
+                persistentVolumeClaim:
+                  claimName: fsx-claim
+              - name: shm
+                emptyDir:
+                  medium: Memory
+                  sizeLimit: 32Gi
+            nodeSelector:
+              node.kubernetes.io/instance-type: "ml.p5.48xlarge"
+            tolerations:
+              - key: nvidia.com/gpu
+                operator: Exists
+                effect: NoSchedule
+
+  # Ephemeral cluster configuration
+  shutdownAfterJobFinishes: true
+  ttlSecondsAfterFinished: 300
