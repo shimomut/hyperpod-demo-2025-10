@@ -13,7 +13,7 @@ spec:
       NCCL_DEBUG: "INFO"
       FI_PROVIDER: "EFA"
       NCCL_SOCKET_IFNAME: "^lo"
-      HF_TOKEN: "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"
+      HF_TOKEN: "hf_xxxxx
       HF_HUB_CACHE: "/data/hf_cache"
       FI_EFA_USE_DEVICE_RDMA: "1"
       FI_EFA_ENABLE_SHM_TRANSFER: "1"
@@ -39,7 +39,7 @@ spec:
       trainer.experiment_name=gsm8k-sft-qwen-2.5-0.5b-instruct
       trainer.logger=console
       trainer.total_epochs=10
-      trainer.s3_base_path=s3://sagemaker-hyperpod-eks-ak-bucket-535002850097-us-west-1/checkpoints
+      trainer.s3_base_path=s3://xxxxxx
       trainer.ckpt_namespace=testns13
       trainer.save_freq=10
       model.lora_rank=32
