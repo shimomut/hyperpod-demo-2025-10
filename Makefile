@@ -9,6 +9,9 @@ delete-sft-htpo:
 deploy-sft-ray:
 	kubectl apply -f sft_ray.yaml
 
+delete-sft-ray:
+	kubectl delete -f sft_ray.yaml
+
 list-hp-training-jobs:
 	kubectl get HyperPodPyTorchJob -A
 
