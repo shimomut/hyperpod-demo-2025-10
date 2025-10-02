@@ -30,7 +30,7 @@ spec:
             job-name: qwen-sft-hpto
             replica-type: pods
         spec:
-          serviceAccountName: s3-cw-access
+          #serviceAccountName: s3-cw-access
           volumes:
             - name: shmem
               hostPath:
@@ -128,8 +128,8 @@ spec:
                 - "trainer.experiment_name=gsm8k-sft-qwen-2.5-0.5b-instruct"
                 - "trainer.logger=console"
                 - "trainer.total_epochs=10"
-                - "trainer.s3_base_path=s3://xxxxxxx"
-                - "trainer.ckpt_namespace=testns13"
+                # - "trainer.s3_base_path=s3://xxxxxxx"
+                # - "trainer.ckpt_namespace=testns13"
                 - "trainer.save_freq=10"
                 - "model.lora_rank=32"
                 - "model.lora_alpha=16"

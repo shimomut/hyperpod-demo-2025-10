@@ -9,7 +9,6 @@ spec:
   # Job configuration
   runtimeEnvYAML: |
     env_vars:
-      CUDA_VISIBLE_DEVICES: "0,1,2,3,4,5,6,7"
       NCCL_DEBUG: "INFO"
       FI_PROVIDER: "EFA"
       NCCL_SOCKET_IFNAME: "^lo"
@@ -33,14 +32,12 @@ spec:
       +data.response_dict_keys=['answer']
       data.micro_batch_size_per_gpu=4
       model.partial_pretrain=Qwen/Qwen2.5-0.5B-Instruct
-      trainer.default_local_dir=/data/qwen
+      trainer.default_local_dir=/data/qwen_ray
       trainer.project_name=gsm8k-sft
       trainer.experiment_name=gsm8k-sft-qwen-2.5-0.5b-instruct
       trainer.logger=console
-      trainer.total_epochs=10
-      trainer.s3_base_path=s3://xxxxxx
-      trainer.ckpt_namespace=testns13
-      trainer.save_freq=10
+      trainer.total_epochs=100
+      trainer.save_freq=50
       model.lora_rank=32
       model.lora_alpha=16
       model.target_modules=all-linear
@@ -56,10 +53,10 @@ spec:
         num-cpus: "16"
       template:
         spec:
-          serviceAccountName: s3-cw-access
+          #serviceAccountName: s3-cw-access
           containers:
             - name: ray-head
-              image: 535002850097.dkr.ecr.us-east-1.amazonaws.com/verl-training:latest # Update this
+              image: 535002850097.dkr.ecr.us-east-1.amazonaws.com/verl-training:ray # Update this
               imagePullPolicy: Always
               resources:
                 limits:
@@ -89,19 +86,19 @@ spec:
             node.kubernetes.io/instance-type: "ml.p5.48xlarge"
 
     workerGroupSpecs:
-      - replicas: 2
-        minReplicas: 2
-        maxReplicas: 2
+      - replicas: 1
+        minReplicas: 1
+        maxReplicas: 1
         groupName: p5-gpu-workers
         rayStartParams:
           num-cpus: "190"
           num-gpus: "8"
         template:
           spec:
-            serviceAccountName: s3-cw-access
+            #serviceAccountName: s3-cw-access
             containers:
               - name: ray-worker
-                image: 535002850097.dkr.ecr.us-east-1.amazonaws.com/verl-training:latest # Update this
+                image: 535002850097.dkr.ecr.us-east-1.amazonaws.com/verl-training:ray # Update this
                 imagePullPolicy: Always
                 resources:
                   limits:
@@ -121,9 +118,37 @@ spec:
                     value: "INFO"
                   - name: NCCL_TREE_THRESHOLD
                     value: "0"
+                  - name: LOGLEVEL
+                    value: INFO
+                  - name: FI_PROVIDER
+                    value: efa
+                  - name: FI_EFA_USE_DEVICE_RDMA
+                    value: '1'
+                  - name: FI_EFA_FORK_SAFE
+                    value: '1'
+                  - name: FI_EFA_ENABLE_SHM_TRANSFER
+                    value: '1'
+                  - name: TORCH_DISTRIBUTED_DEBUG
+                    value: DETAIL
+                  - name: TORCH_NCCL_ENABLE_MONITORING
+                    value: '1'
+                  - name: TORCH_NCCL_TRACE_BUFFER_SIZE
+                    value: '20000'
+                  - name: TORCH_NCCL_DUMP_ON_TIMEOUT
+                    value: '1'
+                  - name: TORCH_NCCL_DEBUG_INFO_TEMP_FILE
+                    value: /local/nccl_trace_rank_
+                  - name: PYTORCH_CUDA_ALLOC_CONF
+                    value: 'expandable_segments:True'
+                  - name: NCCL_DEBUG
+                    value: INFO
+                  - name: NCCL_SOCKET_IFNAME
+                    value: ^lo
+                  - name: TORCH_NCCL_ASYNC_ERROR_HANDLING
+                    value: '1'
                 volumeMounts:
                   - name: shared-storage
-                    mountPath: /workspace/shared
+                    mountPath: /data
                   - name: shm
                     mountPath: /dev/shm
             volumes:
@@ -136,10 +161,6 @@ spec:
                   sizeLimit: 32Gi
             nodeSelector:
               node.kubernetes.io/instance-type: "ml.p5.48xlarge"
-            tolerations:
-              - key: nvidia.com/gpu
-                operator: Exists
-                effect: NoSchedule
 
   # Ephemeral cluster configuration
   shutdownAfterJobFinishes: true
